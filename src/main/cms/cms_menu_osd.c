@@ -162,6 +162,9 @@ const OSD_Entry menuOsdActiveElemsEntries[] =
 #ifdef USE_POSITION_HOLD
     {"POS HOLD READY",     OME_VISIBLE | DYNAMIC, NULL, &osdConfig_item_pos[OSD_POS_HOLD_READY]},
 #endif
+#ifdef USE_PITOT
+    {"AIRSPEED",           OME_VISIBLE | DYNAMIC, NULL, &osdConfig_item_pos[OSD_AIRSPEED]},
+#endif
 #ifdef USE_VARIO
     {"VARIO",              OME_VISIBLE | DYNAMIC, NULL, &osdConfig_item_pos[OSD_NUMERICAL_VARIO]},
 #endif

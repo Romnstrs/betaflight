@@ -184,6 +184,7 @@
 
 #include "sensors/adcinternal.h"
 #include "sensors/barometer.h"
+#include "sensors/pitot.h"
 #include "sensors/battery.h"
 #include "sensors/sensors.h"
 #include "sensors/rangefinder.h"
@@ -1301,6 +1302,19 @@ static void osdElementGpsSpeed(osdElementParms_t *element)
     }
 }
 
+#ifdef USE_PITOT
+static void osdElementAirspeed(osdElementParms_t *element)
+{
+    if (sensors(SENSOR_PITOT) && pitotIsCalibrated()) {
+        // Negative readings are reverse flow or noise around zero; show them as 0.
+        const int32_t airspeedCmS = MAX(lrintf(pitotGetAirspeed()), 0);
+        tfp_sprintf(element->buff, "AS%3d%c", osdGetSpeedToSelectedUnit(airspeedCmS), osdGetSpeedToSelectedUnitSymbol());
+    } else {
+        tfp_sprintf(element->buff, "AS%c%c", SYM_HYPHEN, osdGetSpeedToSelectedUnitSymbol());
+    }
+}
+#endif
+
 static void osdElementEfficiency(osdElementParms_t *element)
 {
     int efficiency = 0;
@@ -2208,6 +2222,9 @@ const osdElementDrawFn osdElementDrawFunction[OSD_ITEM_COUNT] = {
     [OSD_NAV_MAP]                 = osdElementNavMap,
 #endif
 #endif
+#ifdef USE_PITOT
+    [OSD_AIRSPEED]                = osdElementAirspeed,
+#endif
     [OSD_DEBUG]                   = osdElementDebug,
     [OSD_DEBUG2]                  = osdElementDebug2,
 #ifdef USE_ACC
@@ -2380,6 +2397,14 @@ void osdAddActiveElements(void)
 #endif
     }
 #endif // GPS
+
+#ifdef USE_PITOT
+    // Gated on configuration, not SENSOR_PITOT: the sensor is only flagged once
+    // its first sample arrives, after this list has been built.
+    if (pitotIsConfigured()) {
+        osdAddActiveElement(OSD_AIRSPEED);
+    }
+#endif
 
 #if defined(USE_DSHOT_TELEMETRY) || defined(USE_ESC_SENSOR)
     if ((featureIsEnabled(FEATURE_ESC_SENSOR)) || useDshotTelemetry) {
