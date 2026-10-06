@@ -98,6 +98,7 @@
 
 #include "sensors/acceleration.h"
 #include "sensors/battery.h"
+#include "sensors/pitot.h"
 #include "sensors/sensors.h"
 
 #ifdef USE_HARDWARE_REVISION_DETECTION
@@ -179,6 +180,7 @@ const osd_stats_e osdStatsDisplayOrder[OSD_STAT_COUNT] = {
     OSD_STAT_TIMER_2,
     OSD_STAT_MAX_ALTITUDE,
     OSD_STAT_MAX_SPEED,
+    OSD_STAT_MAX_AIRSPEED,
     OSD_STAT_MAX_DISTANCE,
     OSD_STAT_FLIGHT_DISTANCE,
     OSD_STAT_MIN_BATTERY,
@@ -255,15 +257,15 @@ int osdPrintFloat(char *buffer, char leadingSymbol, float value, char *formatStr
 void osdStatSetState(uint8_t statIndex, bool enabled)
 {
     if (enabled) {
-        osdConfigMutable()->enabled_stats |= (1 << statIndex);
+        osdConfigMutable()->enabled_stats |= (1U << statIndex);
     } else {
-        osdConfigMutable()->enabled_stats &= ~(1 << statIndex);
+        osdConfigMutable()->enabled_stats &= ~(1U << statIndex);
     }
 }
 
 bool osdStatGetState(uint8_t statIndex)
 {
-    return osdConfig()->enabled_stats & (1 << statIndex);
+    return osdConfig()->enabled_stats & (1U << statIndex);
 }
 
 void osdWarnSetState(uint8_t warningIndex, bool enabled)
@@ -600,6 +602,7 @@ static void osdResetStats(void)
 {
     stats.max_current     = 0;
     stats.max_speed       = 0;
+    stats.max_airspeed    = 0;
     stats.min_voltage     = 5000;
     stats.end_voltage     = 0;
     stats.min_rssi        = 99; // percent
@@ -649,6 +652,15 @@ static void osdUpdateStats(void)
     }
     if (stats.max_speed < value) {
         stats.max_speed = value;
+    }
+#endif
+
+#ifdef USE_PITOT
+    if (sensors(SENSOR_PITOT) && pitotIsCalibrated()) {
+        value = lrintf(pitotGetAirspeed());
+        if (stats.max_airspeed < value) {
+            stats.max_airspeed = value;
+        }
     }
 #endif
 
@@ -831,6 +843,16 @@ static bool osdDisplayStat(int statistic, uint8_t displayRow)
         osdFormatTimer(buff, false, (OSD_TIMER_SRC(osdConfig()->timers[OSD_TIMER_2]) == OSD_TIMER_SRC_ON ? false : true), OSD_TIMER_2);
         osdDisplayStatisticLabel(midCol, displayRow, osdTimerSourceNames[OSD_TIMER_SRC(osdConfig()->timers[OSD_TIMER_2])], buff);
         return true;
+
+#ifdef USE_PITOT
+    case OSD_STAT_MAX_AIRSPEED:
+        if (pitotIsConfigured()) {
+            tfp_sprintf(buff, "%d%c", osdGetSpeedToSelectedUnit(stats.max_airspeed), osdGetSpeedToSelectedUnitSymbol());
+            osdDisplayStatisticLabel(midCol, displayRow, "MAX AIRSPEED", buff);
+            return true;
+        }
+        break;
+#endif
 
     case OSD_STAT_MAX_ALTITUDE: {
         osdPrintFloat(buff, SYM_NONE, osdGetMetersToSelectedUnit(stats.max_altitude) / 100.0f, "", 1, true, osdGetMetersToSelectedUnitSymbol());
