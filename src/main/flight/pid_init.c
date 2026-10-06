@@ -44,6 +44,7 @@
 #include "rx/rx.h"
 
 #include "sensors/gyro.h"
+#include "sensors/pitot.h"
 #include "sensors/sensors.h"
 
 #include "pid_init.h"
@@ -113,15 +114,28 @@ static void tpaSpeedInit(const pidProfile_t *pidProfile)
     pidRuntime.tpaSpeed.speed = 0.0f;
     pidRuntime.tpaSpeed.maxVoltage = pidProfile->tpa_speed_max_voltage / 100.0f;
     pidRuntime.tpaSpeed.pitchOffset = pidProfile->tpa_speed_pitch_offset * M_PIf / 10.0f / 180.0f;
+    pidRuntime.tpaSpeed.usePitot = false;
 
     switch (pidProfile->tpa_speed_type) {
-    case TPA_SPEED_BASIC:
-        tpaSpeedBasicInit(pidProfile);
-        break;
     case TPA_SPEED_ADVANCED:
         tpaSpeedAdvancedInit(pidProfile);
         break;
+#ifdef USE_PITOT
+    case TPA_SPEED_PITOT:
+        // The BASIC model keeps running as the fallback while the sensor has no
+        // valid reading; measured airspeed replaces its estimate otherwise.
+        tpaSpeedBasicInit(pidProfile);
+        if (pitotConfig()->tpa_speed_pitot_max > 0) {
+            pidRuntime.tpaSpeed.maxSpeed = pitotConfig()->tpa_speed_pitot_max;
+        }
+        pidRuntime.tpaSpeed.usePitot = pitotIsConfigured();
+        break;
+#endif
+    case TPA_SPEED_BASIC:
     default:
+        // Also covers a type this build does not support (e.g. PITOT saved by
+        // a build with USE_PITOT), which would otherwise leave maxSpeed at 0.
+        tpaSpeedBasicInit(pidProfile);
         break;
     }
 }

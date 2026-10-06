@@ -35,6 +35,7 @@ typedef struct pitotConfig_s {
     uint8_t pitot_i2c_address;
     uint8_t pitot_hardware;
     uint8_t pitot_use_tas;      // report true airspeed instead of indicated airspeed
+    uint8_t tpa_speed_pitot_max; // m/s mapped to full TPA argument when tpa_speed_type = PITOT; 0 = use the BASIC model's maximum
 } pitotConfig_t;
 
 PG_DECLARE(pitotConfig_t, pitotConfig);
@@ -61,3 +62,4 @@ bool pitotIsConfigured(void);
 bool pitotIsCalibrated(void);
 void pitotStartCalibration(void);
 float pitotGetAirspeed(void);   // true or indicated, per pitot_use_tas
+float pitotGetIndicatedAirspeed(void);

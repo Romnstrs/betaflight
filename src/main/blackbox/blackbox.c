@@ -93,6 +93,7 @@
 #include "sensors/compass.h"
 #include "sensors/gyro.h"
 #include "sensors/gyro_init.h"
+#include "sensors/pitot.h"
 #include "sensors/rangefinder.h"
 
 #ifdef USE_FLASH_TEST_PRBS
@@ -1864,6 +1865,9 @@ static bool blackboxWriteSysinfo(void)
         BLACKBOX_PRINT_HEADER_LINE(PARAM_NAME_TPA_SPEED_ADV_THRUST, "%d", currentPidProfile->tpa_speed_adv_thrust);
         BLACKBOX_PRINT_HEADER_LINE(PARAM_NAME_TPA_SPEED_MAX_VOLTAGE, "%d", currentPidProfile->tpa_speed_max_voltage);
         BLACKBOX_PRINT_HEADER_LINE(PARAM_NAME_TPA_SPEED_PITCH_OFFSET, "%d", currentPidProfile->tpa_speed_pitch_offset);
+#ifdef USE_PITOT
+        BLACKBOX_PRINT_HEADER_LINE("tpa_speed_pitot_max", "%d", pitotConfig()->tpa_speed_pitot_max);
+#endif
         BLACKBOX_PRINT_HEADER_LINE(PARAM_NAME_YAW_TYPE, "%d", currentPidProfile->yaw_type);
         BLACKBOX_PRINT_HEADER_LINE(PARAM_NAME_ANGLE_PITCH_OFFSET, "%d", currentPidProfile->angle_pitch_offset);
 #endif // USE_WING

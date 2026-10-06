@@ -61,6 +61,7 @@
 #include "sensors/acceleration.h"
 #include "sensors/battery.h"
 #include "sensors/gyro.h"
+#include "sensors/pitot.h"
 
 #include "pid.h"
 
@@ -353,6 +354,17 @@ static float calcWingTpaArgument(void)
 
     pidRuntime.tpaSpeed.speed += a * pidRuntime.dT;
     pidRuntime.tpaSpeed.speed = MAX(0.0f, pidRuntime.tpaSpeed.speed);
+
+#ifdef USE_PITOT
+    // Indicated, not true, airspeed: control-surface authority follows dynamic
+    // pressure. Overwriting the model state means the estimate carries on from
+    // the last measured speed if the sensor drops out.
+    const bool pitotValid = pidRuntime.tpaSpeed.usePitot && pitotIsCalibrated();
+    if (pitotValid) {
+        pidRuntime.tpaSpeed.speed = MAX(0.0f, pitotGetIndicatedAirspeed() / 100.0f);
+    }
+    DEBUG_SET(DEBUG_TPA, 6, pitotValid);
+#endif
     const float tpaArgument = constrainf(pidRuntime.tpaSpeed.speed / pidRuntime.tpaSpeed.maxSpeed, 0.0f, 1.0f);
 
     DEBUG_SET(DEBUG_TPA, 4, lrintf(pidRuntime.tpaSpeed.speed * 10.0f));

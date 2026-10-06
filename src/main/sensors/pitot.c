@@ -90,6 +90,7 @@ void pgResetFn_pitotConfig(pitotConfig_t *config)
     config->pitot_i2c_device = I2C_DEV_TO_CFG(PITOT_I2C_INSTANCE);
     config->pitot_i2c_address = 0;  // 0 = driver default (MS4525: 0x28)
     config->pitot_use_tas = 0;
+    config->tpa_speed_pitot_max = 0;
 }
 
 bool pitotIsConfigured(void)
@@ -336,6 +337,11 @@ uint32_t pitotUpdate(timeUs_t currentTimeUs)
 float pitotGetAirspeed(void)
 {
     return pitotConfig()->pitot_use_tas ? pitot.trueAirspeed : pitot.airspeed;
+}
+
+float pitotGetIndicatedAirspeed(void)
+{
+    return pitot.airspeed;
 }
 
 #endif // USE_PITOT
