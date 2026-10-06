@@ -848,7 +848,7 @@ static bool osdDisplayStat(int statistic, uint8_t displayRow)
     case OSD_STAT_MAX_AIRSPEED:
         if (pitotIsConfigured()) {
             tfp_sprintf(buff, "%d%c", osdGetSpeedToSelectedUnit(stats.max_airspeed), osdGetSpeedToSelectedUnitSymbol());
-            osdDisplayStatisticLabel(midCol, displayRow, "MAX AIRSPEED", buff);
+            osdDisplayStatisticLabel(midCol, displayRow, pitotConfig()->pitot_use_tas ? "MAX TRUE AIRSPEED" : "MAX AIRSPEED", buff);
             return true;
         }
         break;

@@ -1305,12 +1305,13 @@ static void osdElementGpsSpeed(osdElementParms_t *element)
 #ifdef USE_PITOT
 static void osdElementAirspeed(osdElementParms_t *element)
 {
+    const char *label = pitotConfig()->pitot_use_tas ? "TAS" : "AS";
     if (sensors(SENSOR_PITOT) && pitotIsCalibrated()) {
         // Negative readings are reverse flow or noise around zero; show them as 0.
         const int32_t airspeedCmS = MAX(lrintf(pitotGetAirspeed()), 0);
-        tfp_sprintf(element->buff, "AS%3d%c", osdGetSpeedToSelectedUnit(airspeedCmS), osdGetSpeedToSelectedUnitSymbol());
+        tfp_sprintf(element->buff, "%s%3d%c", label, osdGetSpeedToSelectedUnit(airspeedCmS), osdGetSpeedToSelectedUnitSymbol());
     } else {
-        tfp_sprintf(element->buff, "AS%c%c", SYM_HYPHEN, osdGetSpeedToSelectedUnitSymbol());
+        tfp_sprintf(element->buff, "%s%c%c", label, SYM_HYPHEN, osdGetSpeedToSelectedUnitSymbol());
     }
 }
 #endif

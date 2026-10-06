@@ -41,6 +41,7 @@
 
 #include "scheduler/scheduler.h"
 
+#include "sensors/barometer.h"
 #include "sensors/pitot.h"
 #include "sensors/sensors.h"
 
@@ -54,6 +55,13 @@
 
 #define PITOT_CALIBRATION_SAMPLES TASK_PITOT_RATE_HZ  // ~1 s of at-rest samples
 #define AIR_DENSITY_SEA_LEVEL     1.225f    // kg/m^3
+#define AIR_GAS_CONSTANT          287.05f   // J/(kg*K), dry air
+#define ISA_SEA_LEVEL_PRESSURE    101325.0f // Pa
+#define ISA_SEA_LEVEL_TEMP        288.15f   // K
+#define AIR_TEMP_MIN_K            233.0f    // -40 C; outside this a temperature reading is ignored
+#define AIR_TEMP_MAX_K            333.0f    // +60 C
+#define AIR_DENSITY_MIN           0.3f      // kg/m^3; outside this the density estimate is rejected
+#define AIR_DENSITY_MAX           1.5f
 #define PITOT_LPF_HZ              5.0f      // differential-pressure smoothing
 #define PITOT_DRONECAN_STALE_US   500000    // drop the DroneCAN source if no frame for 0.5 s
 #define PITOT_SIGNAL_TIMEOUT_US   1000000   // no valid sample from any source -> sensor lost
@@ -69,6 +77,9 @@ static bool lpfInitialised = false;
 static bool i2cReady = false;
 static pitotSensor_e activeSource = PITOT_NONE;
 static timeUs_t lastValidSampleUs = 0;
+#if ENABLE_DRONECAN
+static float dronecanStaticPa = 0.0f;              // static pressure from the latest DroneCAN sample
+#endif
 
 PG_REGISTER_WITH_RESET_FN(pitotConfig_t, pitotConfig, PG_PITOT_CONFIG, 0);
 
@@ -78,6 +89,7 @@ void pgResetFn_pitotConfig(pitotConfig_t *config)
     config->pitot_busType = BUS_TYPE_I2C;
     config->pitot_i2c_device = I2C_DEV_TO_CFG(PITOT_I2C_INSTANCE);
     config->pitot_i2c_address = 0;  // 0 = driver default (MS4525: 0x28)
+    config->pitot_use_tas = 0;
 }
 
 bool pitotIsConfigured(void)
@@ -127,6 +139,7 @@ static bool readDronecan(float *diffPressurePa, float *temperatureK)
     if (!dronecanAirspeedGetLatest(diffPressurePa, &staticPa, temperatureK)) {
         return false;
     }
+    dronecanStaticPa = staticPa;
     // cmpTimeUs is signed: reject negative (overflowed) and stale ages so a very
     // old frame is not mistaken for fresh.
     const timeDelta_t ageUs = cmpTimeUs(micros(), dronecanAirspeedLastUpdateUs());
@@ -183,6 +196,62 @@ static float airspeedFromPressure(float diffPressurePa)
     return (diffPressurePa < 0.0f ? -v : v) * 100.0f;
 }
 
+static bool isPlausibleAirTemp(float temperatureK)
+{
+    return temperatureK >= AIR_TEMP_MIN_K && temperatureK <= AIR_TEMP_MAX_K;
+}
+
+// Static (ambient) pressure in Pa, or 0 if no source is available. A DroneCAN
+// air-data node measures it at the probe; otherwise use the barometer.
+static float staticPressure(pitotSensor_e source)
+{
+#if ENABLE_DRONECAN
+    if (source == PITOT_DRONECAN && dronecanStaticPa > 0.0f) {
+        return dronecanStaticPa;
+    }
+#else
+    UNUSED(source);
+#endif
+#ifdef USE_BARO
+    if (sensors(SENSOR_BARO) && baro.pressure > 0) {
+        return baro.pressure;
+    }
+#endif
+    return 0.0f;
+}
+
+// Outside air temperature in kelvin. Prefers the pitot sensor's own reading,
+// then the barometer's, and otherwise assumes the ISA standard atmosphere at the
+// current pressure altitude. Both sensor readings are die temperatures, so they
+// can read warm if the sensor sits next to heat sources.
+static float airTemperature(float pitotTemperatureK, float staticPa)
+{
+    if (isPlausibleAirTemp(pitotTemperatureK)) {
+        return pitotTemperatureK;
+    }
+#ifdef USE_BARO
+    if (sensors(SENSOR_BARO) && baro.pressure > 0) {
+        const float baroTemperatureK = baro.temperature / 100.0f + 273.15f;
+        if (isPlausibleAirTemp(baroTemperatureK)) {
+            return baroTemperatureK;
+        }
+    }
+#endif
+    // ISA troposphere: T = T0 * (p / p0)^(R * L / g)
+    return ISA_SEA_LEVEL_TEMP * powf(staticPa / ISA_SEA_LEVEL_PRESSURE, 0.190263f);
+}
+
+// Air density from the ideal gas law, or 0 when there is no usable estimate.
+static float airDensity(pitotSensor_e source, float pitotTemperatureK)
+{
+    const float staticPa = staticPressure(source);
+    if (staticPa <= 0.0f) {
+        return 0.0f;
+    }
+    const float density = staticPa / (AIR_GAS_CONSTANT * airTemperature(pitotTemperatureK, staticPa));
+    return (density >= AIR_DENSITY_MIN && density <= AIR_DENSITY_MAX) ? density : 0.0f;
+}
+
 uint32_t pitotUpdate(timeUs_t currentTimeUs)
 {
     UNUSED(currentTimeUs);
@@ -199,6 +268,8 @@ uint32_t pitotUpdate(timeUs_t currentTimeUs)
             sensorsClear(SENSOR_PITOT);
             pitot.diffPressure = 0.0f;
             pitot.airspeed = 0.0f;
+            pitot.trueAirspeed = 0.0f;
+            pitot.airDensity = 0.0f;
         }
         return TASK_PERIOD_HZ(TASK_PITOT_RATE_HZ);
     }
@@ -242,17 +313,25 @@ uint32_t pitotUpdate(timeUs_t currentTimeUs)
     pitot.diffPressure = diffPressurePa - sourceZero[source];
     pitot.airspeed = airspeedFromPressure(pitot.diffPressure);
 
+    // TAS = IAS * sqrt(rho0 / rho). Without a density estimate, fall back to IAS.
+    pitot.airDensity = airDensity(source, temperatureK);
+    pitot.trueAirspeed = pitot.airDensity > 0.0f
+        ? pitot.airspeed * sqrtf(AIR_DENSITY_SEA_LEVEL / pitot.airDensity)
+        : pitot.airspeed;
+
     DEBUG_SET(DEBUG_PITOT, 0, lrintf(pitot.airspeed));
     DEBUG_SET(DEBUG_PITOT, 1, lrintf(pitot.diffPressure));
     DEBUG_SET(DEBUG_PITOT, 2, lrintf(diffPressurePa));
     DEBUG_SET(DEBUG_PITOT, 3, lrintf(pitot.temperature - 273.15f));
+    DEBUG_SET(DEBUG_PITOT, 4, lrintf(pitot.trueAirspeed));
+    DEBUG_SET(DEBUG_PITOT, 5, lrintf(pitot.airDensity * 1000.0f));   // g/m^3
 
     return TASK_PERIOD_HZ(TASK_PITOT_RATE_HZ);
 }
 
 float pitotGetAirspeed(void)
 {
-    return pitot.airspeed;
+    return pitotConfig()->pitot_use_tas ? pitot.trueAirspeed : pitot.airspeed;
 }
 
 #endif // USE_PITOT
