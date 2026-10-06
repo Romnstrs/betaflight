@@ -291,6 +291,10 @@ uint32_t pitotUpdate(timeUs_t currentTimeUs)
 
     if (!lpfInitialised) {
         pt1FilterInit(&diffPressureLpf, pt1FilterGain(PITOT_LPF_HZ, 1.0f / TASK_PITOT_RATE_HZ));
+        // Start from the first sample rather than 0, so the zeroing average and
+        // the airspeed after a source switch are not dragged towards zero while
+        // the filter settles.
+        diffPressureLpf.state = diffPressurePa;
         lpfInitialised = true;
     }
     diffPressurePa = pt1FilterApply(&diffPressureLpf, diffPressurePa);
