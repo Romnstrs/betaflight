@@ -180,6 +180,7 @@ typedef enum tpaCurveType_e {
 typedef enum tpaSpeedType_e {
     TPA_SPEED_BASIC,
     TPA_SPEED_ADVANCED,
+    TPA_SPEED_PITOT,
 } tpaSpeedType_t;
 
 typedef enum {
@@ -376,6 +377,7 @@ typedef struct tpaSpeedParams_s {
     float speed;
     float maxVoltage;
     float pitchOffset;
+    bool usePitot;              // measured airspeed overrides the estimate while the pitot sensor is valid
 } tpaSpeedParams_t;
 
 typedef struct pidRuntime_s {

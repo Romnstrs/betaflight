@@ -34,6 +34,8 @@ typedef struct pitotConfig_s {
     uint8_t pitot_i2c_device;
     uint8_t pitot_i2c_address;
     uint8_t pitot_hardware;
+    uint8_t pitot_use_tas;      // report true airspeed instead of indicated airspeed
+    uint8_t tpa_speed_pitot_max; // m/s mapped to full TPA argument when tpa_speed_type = PITOT; 0 = use the BASIC model's maximum
 } pitotConfig_t;
 
 PG_DECLARE(pitotConfig_t, pitotConfig);
@@ -45,6 +47,8 @@ PG_DECLARE(pitotConfig_t, pitotConfig);
 typedef struct pitot_s {
     pitotDev_t dev;
     float airspeed;             // cm/s, indicated airspeed
+    float trueAirspeed;         // cm/s, density-corrected; equals airspeed when density is unknown
+    float airDensity;           // kg/m^3 used for trueAirspeed, 0 = unknown
     float diffPressure;         // Pa, zero-corrected differential pressure
     float temperature;          // kelvin
     float pressureZero;         // Pa, at-rest offset captured by calibration
@@ -57,4 +61,5 @@ uint32_t pitotUpdate(timeUs_t currentTimeUs);
 bool pitotIsConfigured(void);
 bool pitotIsCalibrated(void);
 void pitotStartCalibration(void);
-float pitotGetAirspeed(void);
+float pitotGetAirspeed(void);   // true or indicated, per pitot_use_tas
+float pitotGetIndicatedAirspeed(void);
