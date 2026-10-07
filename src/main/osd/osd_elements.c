@@ -1203,6 +1203,20 @@ static void osdElementGForce(osdElementParms_t *element)
 }
 #endif // USE_ACC
 
+#ifdef USE_PITOT
+static void osdElementAirspeed(osdElementParms_t *element)
+{
+    const char *label = pitotConfig()->pitot_use_tas ? "TAS" : "AS";
+    if (sensors(SENSOR_PITOT) && pitotIsCalibrated()) {
+        // Negative readings are reverse flow or noise around zero; show them as 0.
+        const int32_t airspeedCmS = MAX(lrintf(pitotGetAirspeed()), 0);
+        tfp_sprintf(element->buff, "%s%3d%c", label, osdGetSpeedToSelectedUnit(airspeedCmS), osdGetSpeedToSelectedUnitSymbol());
+    } else {
+        tfp_sprintf(element->buff, "%s%c%c", label, SYM_HYPHEN, osdGetSpeedToSelectedUnitSymbol());
+    }
+}
+#endif
+
 #ifdef USE_GPS
 static void osdElementGpsFlightDistance(osdElementParms_t *element)
 {
@@ -1301,20 +1315,6 @@ static void osdElementGpsSpeed(osdElementParms_t *element)
         tfp_sprintf(element->buff, "%c%c%c", SYM_SPEED, SYM_HYPHEN, osdGetSpeedToSelectedUnitSymbol());
     }
 }
-
-#ifdef USE_PITOT
-static void osdElementAirspeed(osdElementParms_t *element)
-{
-    const char *label = pitotConfig()->pitot_use_tas ? "TAS" : "AS";
-    if (sensors(SENSOR_PITOT) && pitotIsCalibrated()) {
-        // Negative readings are reverse flow or noise around zero; show them as 0.
-        const int32_t airspeedCmS = MAX(lrintf(pitotGetAirspeed()), 0);
-        tfp_sprintf(element->buff, "%s%3d%c", label, osdGetSpeedToSelectedUnit(airspeedCmS), osdGetSpeedToSelectedUnitSymbol());
-    } else {
-        tfp_sprintf(element->buff, "%s%c%c", label, SYM_HYPHEN, osdGetSpeedToSelectedUnitSymbol());
-    }
-}
-#endif
 
 static void osdElementEfficiency(osdElementParms_t *element)
 {
